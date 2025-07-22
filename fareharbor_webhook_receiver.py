@@ -13,7 +13,7 @@ SPREADSHEET_NAME = "Monthly Rentals Equipment Report"
 TAB_NAME = "2025 Report"
 
 SCOPE = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-CREDS = ServiceAccountCredentials.from_json_keyfile_name('/path/to/service_account.json', SCOPE)
+CREDS = ServiceAccountCredentials.from_json_keyfile_name('/Users/ethan/Desktop/fareharbor_webhook/boat-reporter-00a2f4315e2b.json', SCOPE)
 GC = gspread.authorize(CREDS)
 
 TARGET_ITEMS = [

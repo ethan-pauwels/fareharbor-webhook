@@ -6,6 +6,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 import pytz
 import os
 import json
+import base64
 
 app = FastAPI()
 
@@ -14,7 +15,14 @@ SPREADSHEET_NAME = "Monthly Rentals Equipment Report"
 TAB_NAME = "2025 Report"
 
 SCOPE = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-creds_dict = json.loads(os.environ["GOOGLE_SERVICE_CREDS"])
+
+# Load Google service account credentials from base64-encoded env variable
+creds_b64 = os.environ.get("GOOGLE_SERVICE_CREDS_B64")
+if not creds_b64:
+    raise ValueError("GOOGLE_SERVICE_CREDS_B64 environment variable not found.")
+creds_json = base64.b64decode(creds_b64).decode("utf-8")
+creds_dict = json.loads(creds_json)
+
 CREDS = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, SCOPE)
 GC = gspread.authorize(CREDS)
 
@@ -46,7 +54,6 @@ def update_google_sheet(booking_data):
         print("🚨 Sheet or tab not found:", e)
         return
 
-    # Parse fields
     item_name = booking_data.get("product", {}).get("name", "")
     if item_name not in TARGET_ITEMS:
         return
@@ -63,7 +70,6 @@ def update_google_sheet(booking_data):
 
     boat_type = detect_boat_type(notes, custom_fields)
 
-    # Update Google Sheet
     data = worksheet.get_all_values()
     for row_idx in range(1, len(data)):
         row = data[row_idx]

@@ -1,10 +1,11 @@
-
 from fastapi import FastAPI, Request
 from collections import defaultdict
 from datetime import datetime
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import pytz
+import os
+import json
 
 app = FastAPI()
 
@@ -13,7 +14,8 @@ SPREADSHEET_NAME = "Monthly Rentals Equipment Report"
 TAB_NAME = "2025 Report"
 
 SCOPE = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-CREDS = ServiceAccountCredentials.from_json_keyfile_name('/Users/ethan/Desktop/fareharbor_webhook/boat-reporter-00a2f4315e2b.json', SCOPE)
+creds_dict = json.loads(os.environ["GOOGLE_SERVICE_CREDS"])
+CREDS = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, SCOPE)
 GC = gspread.authorize(CREDS)
 
 TARGET_ITEMS = [

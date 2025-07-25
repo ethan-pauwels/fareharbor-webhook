@@ -32,9 +32,10 @@ TARGET_ITEMS = [
     "Kayak and SUP Reservations"
 ]
 
-def detect_boat_type(notes, custom_fields):
-    combined = notes.lower() if notes else ""
-    for field in custom_fields:
+def detect_boat_type(booking):
+    combined = ""
+    # Try both custom field containers just in case
+    for field in booking.get("custom_field_values", []) + booking.get("availability", {}).get("custom_field_instances", []):
         if isinstance(field, dict):
             combined += " " + field.get("value", "").lower()
 
@@ -54,21 +55,25 @@ def update_google_sheet(booking_data):
         print("🚨 Sheet or tab not found:", e)
         return
 
-    item_name = booking_data.get("product", {}).get("name", "")
+    booking = booking_data.get("booking", {})
+    item_name = booking.get("availability", {}).get("item", {}).get("name", "")
     if item_name not in TARGET_ITEMS:
+        print(f"ℹ️ Skipping item: {item_name}")
         return
 
-    date_str = booking_data.get("date", "")
+    start_at = booking.get("availability", {}).get("start_at")
+    if not start_at:
+        print("⚠️ Missing booking date")
+        return
+
     try:
-        date = datetime.strptime(date_str, "%Y-%m-%d").astimezone(pytz.UTC)
+        date = datetime.fromisoformat(start_at.replace("Z", "+00:00")).astimezone(pytz.UTC)
     except ValueError:
+        print("⚠️ Invalid date format:", start_at)
         return
     month = date.strftime("%b %Y")
 
-    notes = booking_data.get("notes", "")
-    custom_fields = booking_data.get("custom_fields", [])
-
-    boat_type = detect_boat_type(notes, custom_fields)
+    boat_type = detect_boat_type(booking)
 
     data = worksheet.get_all_values()
     for row_idx in range(1, len(data)):
@@ -89,7 +94,8 @@ def update_google_sheet(booking_data):
 @app.post("/fareharbor/webhook")
 async def receive_booking(request: Request):
     payload = await request.json()
-    print("📦 Full Payload:\n", json.dumps(payload, indent=2))  # Debug payload structure
-    print("📦 Incoming Booking:", payload.get("booking_id", "No ID"))  # Will likely still be None
+    print("📦 Full Payload:\n", json.dumps(payload, indent=2))
+    booking_id = payload.get("booking", {}).get("pk", "No ID")
+    print("📦 Incoming Booking:", booking_id)
     update_google_sheet(payload)
     return {"status": "received"}

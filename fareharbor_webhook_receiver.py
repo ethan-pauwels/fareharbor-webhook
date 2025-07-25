@@ -13,6 +13,7 @@ app = FastAPI()
 # ======= CONFIG =======
 SPREADSHEET_NAME = "Monthly Rentals Equipment Report"
 TAB_NAME = "2025 Report"
+BACKUP_TAB_NAME = "Webhook Log"
 
 SCOPE = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 
@@ -61,32 +62,82 @@ def detect_boat_type(notes, custom_fields, customers):
         return "SUP"
     return "Unlisted"
 
+# ======= BACKUP LOGGING =======
+def log_to_backup_sheet(data):
+    try:
+        sh = GC.open(SPREADSHEET_NAME)
+        backup_ws = sh.worksheet(BACKUP_TAB_NAME)
+    except Exception as e:
+        print("🚨 Backup log sheet not found:", e)
+        return
+
+    headers = [
+        "Timestamp (UTC)", "Product Name", "Start Date", "Detected Boat Type",
+        "Notes", "Custom Field Values", "Logged?", "Failure Reason"
+    ]
+
+    existing = backup_ws.get_all_values()
+    if not existing or existing[0] != headers:
+        backup_ws.resize(rows=1)
+        backup_ws.insert_row(headers, index=1)
+
+    backup_ws.append_row([
+        data.get("timestamp", ""),
+        data.get("product_name", ""),
+        data.get("start_date", ""),
+        data.get("boat_type", ""),
+        data.get("notes", ""),
+        json.dumps(data.get("custom_fields", [])),
+        data.get("logged", ""),
+        data.get("error", "")
+    ])
 
 # ======= SHEET UPDATE =======
 def update_google_sheet(booking_data):
+    log_data = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "product_name": booking_data.get("availability", {}).get("item", {}).get("name", ""),
+        "start_date": booking_data.get("availability", {}).get("start_at", ""),
+        "notes": booking_data.get("note", ""),
+        "custom_fields": booking_data.get("custom_field_values", [])
+    }
+
     try:
         sh = GC.open(SPREADSHEET_NAME)
         worksheet = sh.worksheet(TAB_NAME)
     except Exception as e:
+        log_data["logged"] = "No"
+        log_data["boat_type"] = "N/A"
+        log_data["error"] = f"Sheet error: {e}"
+        log_to_backup_sheet(log_data)
         print("🚨 Sheet or tab not found:", e)
         return
 
-    item_name = booking_data.get("availability", {}).get("item", {}).get("name", "")
+    item_name = log_data["product_name"]
     if item_name not in TARGET_ITEMS:
+        log_data["logged"] = "No"
+        log_data["boat_type"] = "N/A"
+        log_data["error"] = "Item not in target list"
+        log_to_backup_sheet(log_data)
+        print(f"⚠️ Ignored item: {item_name}")
         return
 
-    date_str = booking_data.get("availability", {}).get("start_at", "")
     try:
-        date = datetime.fromisoformat(date_str)
+        date = datetime.fromisoformat(log_data["start_date"])
     except ValueError:
+        log_data["logged"] = "No"
+        log_data["boat_type"] = "N/A"
+        log_data["error"] = "Invalid start date"
+        log_to_backup_sheet(log_data)
         return
     month = date.strftime("%b %Y")
 
-    notes = booking_data.get("note", "")
-    custom_fields = booking_data.get("custom_field_values", [])
+    notes = log_data["notes"]
+    custom_fields = log_data["custom_fields"]
     customers = booking_data.get("customers", [])
 
     boat_type = detect_boat_type(notes, custom_fields, customers)
+    log_data["boat_type"] = boat_type
 
     data = worksheet.get_all_values()
     for row_idx in range(1, len(data)):
@@ -99,9 +150,15 @@ def update_google_sheet(booking_data):
             current = row[3].strip()
             current_val = int(current) if current.isdigit() else 0
             worksheet.update_cell(row_idx + 1, 4, current_val + 1)
+            log_data["logged"] = "Yes"
+            log_data["error"] = ""
+            log_to_backup_sheet(log_data)
             print(f"✅ Logged 1 {boat_type} for {month}")
             return
 
+    log_data["logged"] = "No"
+    log_data["error"] = f"No matching row for {boat_type} in {month}"
+    log_to_backup_sheet(log_data)
     print(f"⚠️ No matching row found for {boat_type} in {month}")
 
 # ======= ENDPOINT =======

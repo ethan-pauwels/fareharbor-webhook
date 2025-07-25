@@ -89,6 +89,7 @@ def update_google_sheet(booking_data):
 @app.post("/fareharbor/webhook")
 async def receive_booking(request: Request):
     payload = await request.json()
-    print("📦 Incoming Booking:", payload.get("booking_id", "No ID"))
+    print("📦 Full Payload:\n", json.dumps(payload, indent=2))  # Debug payload structure
+    print("📦 Incoming Booking:", payload.get("booking_id", "No ID"))  # Will likely still be None
     update_google_sheet(payload)
     return {"status": "received"}

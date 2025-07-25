@@ -32,19 +32,30 @@ TARGET_ITEMS = [
     "Kayak and SUP Reservations"
 ]
 
-def detect_boat_type(booking):
-    combined = ""
-    # Try both custom field containers just in case
-    for field in booking.get("custom_field_values", []) + booking.get("availability", {}).get("custom_field_instances", []):
+def detect_boat_type(notes, custom_fields, customers):
+    combined = notes.lower() if notes else ""
+    for field in custom_fields:
         if isinstance(field, dict):
             combined += " " + field.get("value", "").lower()
 
+    # Primary method: look for keywords in notes and custom fields
     if "single" in combined:
         return "Single"
     elif "double" in combined:
         return "Double"
     elif "sup" in combined or "paddleboard" in combined:
         return "SUP"
+
+    # Secondary method: fallback to customer types
+    for customer in customers:
+        ct = customer.get("customer_type_rate", {}).get("customer_type", {}).get("singular", "").lower()
+        if "single" in ct:
+            return "Single"
+        elif "double" in ct:
+            return "Double"
+        elif "sup" in ct or "paddleboard" in ct:
+            return "SUP"
+
     return "Unlisted"
 
 def update_google_sheet(booking_data):
@@ -55,26 +66,27 @@ def update_google_sheet(booking_data):
         print("🚨 Sheet or tab not found:", e)
         return
 
-    booking = booking_data.get("booking", {})
-    item_name = booking.get("availability", {}).get("item", {}).get("name", "")
+    # Parse item and validate
+    item_name = booking_data.get("availability", {}).get("item", {}).get("name", "")
     if item_name not in TARGET_ITEMS:
-        print(f"ℹ️ Skipping item: {item_name}")
         return
 
-    start_at = booking.get("availability", {}).get("start_at")
-    if not start_at:
-        print("⚠️ Missing booking date")
-        return
-
+    # Parse start date
+    date_str = booking_data.get("availability", {}).get("start_at", "")
     try:
-        date = datetime.fromisoformat(start_at.replace("Z", "+00:00")).astimezone(pytz.UTC)
+        date = datetime.fromisoformat(date_str)
     except ValueError:
-        print("⚠️ Invalid date format:", start_at)
         return
     month = date.strftime("%b %Y")
 
-    boat_type = detect_boat_type(booking)
+    # Pull notes and custom fields
+    notes = booking_data.get("note", "")
+    custom_fields = booking_data.get("custom_field_values", [])
+    customers = booking_data.get("customers", [])
 
+    boat_type = detect_boat_type(notes, custom_fields, customers)
+
+    # Update sheet
     data = worksheet.get_all_values()
     for row_idx in range(1, len(data)):
         row = data[row_idx]
@@ -94,8 +106,8 @@ def update_google_sheet(booking_data):
 @app.post("/fareharbor/webhook")
 async def receive_booking(request: Request):
     payload = await request.json()
-    print("📦 Full Payload:\n", json.dumps(payload, indent=2))
-    booking_id = payload.get("booking", {}).get("pk", "No ID")
-    print("📦 Incoming Booking:", booking_id)
-    update_google_sheet(payload)
+    booking = payload.get("booking", {})
+    print("📦 Full Payload:\n", json.dumps(booking, indent=2))
+    print("📦 Incoming Booking:", booking.get("pk", "No ID"))
+    update_google_sheet(booking)
     return {"status": "received"}

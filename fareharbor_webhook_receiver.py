@@ -32,21 +32,34 @@ TARGET_ITEMS = [
     "Kayak and SUP Reservations"
 ]
 
-def detect_boat_type(notes, custom_fields):
-    combined = notes.lower() if notes else ""
+# ======= BOAT TYPE DETECTION =======
+SINGLE_KEYWORDS = ["single"]
+DOUBLE_KEYWORDS = ["double", "tandem"]
+SUP_KEYWORDS = ["sup", "paddleboard"]
+
+def detect_boat_type(notes, custom_fields, customers):
+    combined = (notes or "").lower()
+    
     for field in custom_fields:
         if isinstance(field, dict):
             combined += " " + field.get("value", "").lower()
+    
+    for customer in customers:
+        try:
+            type_name = customer["customer_type_rate"]["customer_type"]["singular"].lower()
+            combined += " " + type_name
+        except (KeyError, TypeError):
+            continue
 
-    if "single" in combined:
+    if any(word in combined for word in SINGLE_KEYWORDS):
         return "Single"
-    elif "double" in combined or "tandem" in combined:
+    elif any(word in combined for word in DOUBLE_KEYWORDS):
         return "Double"
-    elif "sup" in combined or "paddleboard" in combined:
+    elif any(word in combined for word in SUP_KEYWORDS):
         return "SUP"
     return "Unlisted"
 
-
+# ======= SHEET UPDATE =======
 def update_google_sheet(booking_data):
     try:
         sh = GC.open(SPREADSHEET_NAME)
@@ -55,12 +68,10 @@ def update_google_sheet(booking_data):
         print("🚨 Sheet or tab not found:", e)
         return
 
-    # Parse item and validate
     item_name = booking_data.get("availability", {}).get("item", {}).get("name", "")
     if item_name not in TARGET_ITEMS:
         return
 
-    # Parse start date
     date_str = booking_data.get("availability", {}).get("start_at", "")
     try:
         date = datetime.fromisoformat(date_str)
@@ -68,14 +79,12 @@ def update_google_sheet(booking_data):
         return
     month = date.strftime("%b %Y")
 
-    # Pull notes and custom fields
     notes = booking_data.get("note", "")
     custom_fields = booking_data.get("custom_field_values", [])
     customers = booking_data.get("customers", [])
 
     boat_type = detect_boat_type(notes, custom_fields, customers)
 
-    # Update sheet
     data = worksheet.get_all_values()
     for row_idx in range(1, len(data)):
         row = data[row_idx]
@@ -92,6 +101,7 @@ def update_google_sheet(booking_data):
 
     print(f"⚠️ No matching row found for {boat_type} in {month}")
 
+# ======= ENDPOINT =======
 @app.post("/fareharbor/webhook")
 async def receive_booking(request: Request):
     payload = await request.json()

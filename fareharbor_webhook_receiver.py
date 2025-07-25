@@ -32,31 +32,20 @@ TARGET_ITEMS = [
     "Kayak and SUP Reservations"
 ]
 
-def detect_boat_type(notes, custom_fields, customers):
+def detect_boat_type(notes, custom_fields):
     combined = notes.lower() if notes else ""
     for field in custom_fields:
         if isinstance(field, dict):
             combined += " " + field.get("value", "").lower()
 
-    # Primary method: look for keywords in notes and custom fields
     if "single" in combined:
         return "Single"
-    elif "double" in combined:
+    elif "double" in combined or "tandem" in combined:
         return "Double"
     elif "sup" in combined or "paddleboard" in combined:
         return "SUP"
-
-    # Secondary method: fallback to customer types
-    for customer in customers:
-        ct = customer.get("customer_type_rate", {}).get("customer_type", {}).get("singular", "").lower()
-        if "single" in ct:
-            return "Single"
-        elif "double" in ct:
-            return "Double"
-        elif "sup" in ct or "paddleboard" in ct:
-            return "SUP"
-
     return "Unlisted"
+
 
 def update_google_sheet(booking_data):
     try:

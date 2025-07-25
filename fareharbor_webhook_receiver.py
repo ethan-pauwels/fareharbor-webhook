@@ -42,8 +42,10 @@ def detect_boat_type(notes, custom_fields, customers):
     
     for field in custom_fields:
         if isinstance(field, dict):
-            combined += " " + field.get("value", "").lower()
-    
+            val = field.get("value", "")
+            display_val = field.get("display_value", "")
+            combined += f" {val.lower()} {display_val.lower()}"
+
     for customer in customers:
         try:
             type_name = customer["customer_type_rate"]["customer_type"]["singular"].lower()
@@ -58,6 +60,7 @@ def detect_boat_type(notes, custom_fields, customers):
     elif any(word in combined for word in SUP_KEYWORDS):
         return "SUP"
     return "Unlisted"
+
 
 # ======= SHEET UPDATE =======
 def update_google_sheet(booking_data):

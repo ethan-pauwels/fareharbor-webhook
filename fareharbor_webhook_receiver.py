@@ -96,11 +96,16 @@ def log_to_backup_sheet(data):
 def update_google_sheet(booking_data):
     log_data = {
         "timestamp": datetime.utcnow().isoformat(),
-        "product_name": booking_data.get("availability", {}).get("item", {}).get("name", ""),
         "start_date": booking_data.get("availability", {}).get("start_at", ""),
         "notes": booking_data.get("note", ""),
         "custom_fields": booking_data.get("custom_field_values", [])
     }
+
+    item = booking_data.get("availability", {}).get("item", {})
+    item_name = item.get("name", "")
+    log_data["product_name"] = item_name
+
+    print(f"🧪 Incoming Item Name: '{item_name}'")
 
     try:
         sh = GC.open(SPREADSHEET_NAME)
@@ -113,13 +118,12 @@ def update_google_sheet(booking_data):
         print("🚨 Sheet or tab not found:", e)
         return
 
-    item_name = log_data["product_name"]
     if item_name not in TARGET_ITEMS:
         log_data["logged"] = "No"
         log_data["boat_type"] = "N/A"
-        log_data["error"] = "Item not in target list"
+        log_data["error"] = f"Item not in TARGET_ITEMS: {item_name}"
         log_to_backup_sheet(log_data)
-        print(f"⚠️ Ignored item: {item_name}")
+        print(f"⚠️ Logging skipped: item not in TARGET_ITEMS → '{item_name}'")
         return
 
     try:

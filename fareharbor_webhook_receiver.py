@@ -27,12 +27,6 @@ creds_dict = json.loads(creds_json)
 CREDS = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, SCOPE)
 GC = gspread.authorize(CREDS)
 
-TARGET_ITEMS = [
-    "Sunset Bat Tours",
-    "Downtown to Barton Springs Tour",
-    "Kayak and SUP Reservations"
-]
-
 # ======= BOAT TYPE DETECTION =======
 SINGLE_KEYWORDS = ["single"]
 DOUBLE_KEYWORDS = ["double", "tandem"]
@@ -40,7 +34,7 @@ SUP_KEYWORDS = ["sup", "paddleboard"]
 
 def detect_boat_type(notes, custom_fields, customers):
     combined = (notes or "").lower()
-    
+
     for field in custom_fields:
         if isinstance(field, dict):
             val = field.get("value", "")
@@ -53,6 +47,8 @@ def detect_boat_type(notes, custom_fields, customers):
             combined += " " + type_name
         except (KeyError, TypeError):
             continue
+
+    print("🧪 Combined detection string:", combined)
 
     if any(word in combined for word in SINGLE_KEYWORDS):
         return "Single"
@@ -118,14 +114,6 @@ def update_google_sheet(booking_data):
         print("🚨 Sheet or tab not found:", e)
         return
 
-    if item_name not in TARGET_ITEMS:
-        log_data["logged"] = "No"
-        log_data["boat_type"] = "N/A"
-        log_data["error"] = f"Item not in TARGET_ITEMS: {item_name}"
-        log_to_backup_sheet(log_data)
-        print(f"⚠️ Logging skipped: item not in TARGET_ITEMS → '{item_name}'")
-        return
-
     try:
         date = datetime.fromisoformat(log_data["start_date"])
     except ValueError:
@@ -134,11 +122,14 @@ def update_google_sheet(booking_data):
         log_data["error"] = "Invalid start date"
         log_to_backup_sheet(log_data)
         return
+
     month = date.strftime("%b %Y")
 
     notes = log_data["notes"]
     custom_fields = log_data["custom_fields"]
     customers = booking_data.get("customers", [])
+    if not customers:
+        print("⚠️ No customers found in booking")
 
     boat_type = detect_boat_type(notes, custom_fields, customers)
     log_data["boat_type"] = boat_type

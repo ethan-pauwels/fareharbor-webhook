@@ -157,11 +157,8 @@ def update_google_sheet(booking_data):
     print(f"⚠️ No matching row found for {boat_type} in {month}")
 
 # ======= ENDPOINT =======
-@app.post("/fareharbor/webhook")
-async def receive_booking(request: Request):
-    payload = await request.json()
-    booking = payload.get("booking", {})
-    print("📦 Full Payload:\n", json.dumps(booking, indent=2))
-    print("📦 Incoming Booking:", booking.get("pk", "No ID"))
-    update_google_sheet(booking)
-    return {"status": "received"}
+@@app.post("/fareharbor/webhook")
+async def disable_webhook():
+    print("🚫 Webhook disabled: ignoring incoming FareHarbor payload.")
+    return {"status": "webhook disabled"}
+
